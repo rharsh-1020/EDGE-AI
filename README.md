@@ -1,33 +1,84 @@
-# EDGE-AI
+# Edge-AI: Python-Based IoT Request Provisioning
 
-## Description
-The project proposes the implementation of  SAC (Soft actor-critic) to optimize workload management in an Edge Computing system (DFaaS). The goal is to find the optimal policy for local processing, forwarding of requests to edge nodes, and rejection of requests based on system conditions.
-The current implementation still has simplifying assumptions compared to the real scenario.
+This repository contains a **Python implementation** of the research paper **"Edge-AI: IoT Request Service Provisioning in Federated Edge Computing Using Actor-Critic Reinforcement Learning"**.
 
-In the simulated environment, the agent receives a sequence of incoming requests over time. At each step, it must decide how many of these requests to process locally, how many to forward to another edge node, and/or how many to reject. The number of incoming requests varies over time.
+It implements a **Deep Reinforcement Learning (Actor-Critic)** agent to optimize task dispatching in a Federated Edge Computing (FEC) environment. The system balances **profit maximization** for edge service providers and **latency minimization** for IoT devices.
 
-The `action space` is a three-dimensional continuous box where each dimension corresponds to the proportions of requests that are processed locally, forwarded, or rejected.
+## Paper Reference
+**Title:** Edge-AI: IoT Request Service Provisioning in Federated Edge Computing Using Actor-Critic Reinforcement Learning  
+**Authors:** Hojjat Baghban, Amir Rezapour, Ching-Hsien Hsu, Sirapop Nuannimnoi, Ching-Yao Huang  
+**Journal:** IEEE Transactions on Engineering Management 
 
-The `observation space` consists of four components:
-- The number of incoming requests
-- The remaining queue capacity
-- The remaining forward capacity
-- A congestion flag, indicating whether the queue is congested
+## System Architecture
 
-The `reward function` in this environment depends on the actions taken by the agent and the system state. The reward function provides more points for processing requests locally and fewer points for forwarding requests.
+The project simulates a Multi-access Edge Computing (MEC) environment where an intelligent orchestrator (Edge-AI) decides where to process incoming IoT tasks:
+1.  **Local Execution:** Process on the receiving edge node.
+2.  **Offloading:** Dispatch to a different edge cluster in the federation.
 
-## Training and test settings
-Three different training scenarios were defined, distinguished by the different way of generating requests to be processed and the different way of updating the available forwarding capacity to other nodes.
+### Key Components
+* **Environment (`env.py`):** A custom environment simulating edge nodes, varying network costs, and task generation (Poisson/Gaussian distributions).
+* **Agent (`models.py`):** An Actor-Critic neural network implemented in Python.
+    * **Actor:** Outputs a probability distribution over edge clusters.
+    * **Critic:** Estimates the value function to guide the actor updates.
+* **Clustering (`clustering.py`):** Uses K-Means to group edge nodes by computational and communication costs to reduce the action space.
 
-The idea is to evaluate the results obtained according to different work contexts. Different scenarios allow us to assess the generalization capabilities of the algorithms by evaluating the performance obtained in work scenarios other than the training scenario (overfitting evaluation).
+## Project Structure
 
-## Best experiment results
-The highest reward scores and best generalization abilities have been achieved by PPO with standard hyperparameters, trained in scenario 2.
+```bash
+├── env.py           # Custom Environment (State, Reward, Transition logic)
+├── models.py        # Neural Network definitions (Actor & Critic)
+├── training.py      # Main entry point: Training loop and Evaluation
+├── baseline.py      # Random and Greedy algorithms for comparison
+├── clustering.py    # K-Means clustering logic for edge nodes
+├── atm.py           # Action Translator Module (Cluster -> Specific Node)
+├── plots.py         # Visualization utilities
+└── RESULT/          # Directory where plots are saved
+```
 
-- Results achieved by testing ppo (trained in scenario 2) in scenario 3
-![s2s3_reward](https://github.com/GiacomoPracucci/RL-edge-computing/assets/94844087/e8c54160-2083-4040-9aef-1ce708b8822c)
-![s2s3_rejected](https://github.com/GiacomoPracucci/RL-edge-computing/assets/94844087/2d19ae0f-1dd8-4515-92c5-a4ad58a1cfc4)
+## Installation & Usage 
+* Prerequisites
+  Ensure you have Python 3.8+ installed.
+  Install the required Python libraries
+  ```bash
+  pip install numpy torch gymnasium matplotlib scikit-learn tqdm
+  ```
+  
+## Running the Simulation
+To train the agent and generate the comparison plots
+```bash
+python training.py
+```
+This will:
+* Initialize the Federated Edge Environment.
+* Train the Actor-Critic agent for m=20 and m=80 node topologies.
+* Run baseline benchmarks (Random Policy, Greedy Policy).
+* Generate performance metrics in the RESULT/ directory.
 
-- Results achieved by testing ppo (trained in scenario 2) in scenario 1
-![s2s1_reward](https://github.com/GiacomoPracucci/RL-edge-computing/assets/94844087/c362afe5-6b91-452e-ad54-c31751a3951a)
-![s2s1_rejected](https://github.com/GiacomoPracucci/RL-edge-computing/assets/94844087/1e3487d9-7011-4add-a20c-dace4c962e64)
+## Results
+
+1. ConvergenceThe intelligent agent learns to maximize the total reward (weighted sum of Profit and Latency) over 300+ episodes.
+[Performance of the learning agent on various federation sizes in terms of totalreward .They show the convergence of DRL-Dispatcher on various federation sizes. The solid lines represent smoothed total rewards with a window size of 40 episodes. (a) Federation size m = 20. (b) Federation size m = 80](plots/Fig3_convergence (1).png)
+> Performance of the learning agent on various federation sizes in terms of totalreward .They show the convergence of DRL-Dispatcher on various federation sizes. The solid lines represent smoothed total rewards with a window size of 40 episodes. (a) Federation size m = 20. (b) Federation size m = 80
+3. Policy Comparison:Comparison of the DRL-Dispatcher against Greedy (lowest utilization) and Random policies. The Python-based agent consistently achieves higher cumulative rewards by learning the trade-off between communication costs and processing speed.
+<table>
+<tr>
+  <td align="center"><img src="plots/Fig4_comparison_m20.png" width="120"/><br>Fedaration Size=20</td>
+  <td align="center"><img src="plots/Fig4_comparison_m80.png" width="120"/><br>Fedaration Size=20</td>
+</tr>
+</table>
+
+>  Comparison of the performance of DRL-Dispatcher, GA, and RA in terms of cumulative reward on different federation sizes. (a) Federation size m=20.(b) Federation size m = 80
+
+3.Impact of Task Features: The system was stress-tested against increasing task lengths (CPU cycles) and task sizes (Data size).
+* Profitability: As task length increases, the agent successfully identifies profitable offloading opportunities, maintaining a positive profit margin (Revenue > Cost).
+* Latency: The agent minimizes delay even as task sizes grow by intelligently routing data to nodes with higher bandwidth.Profit vs. Task LengthDelay vs. Task Length
+<table>
+<tr>
+  <td align="center"><img src="plots/Fig5_profit.png" width="120"/><br>(a)</td>
+  <td align="center"><img src="plots/Fig5_delay.png" width="120"/><br>(b)</td>
+</tr>
+</table>
+
+>   Effect of input task's length on estimated profit and estimated response delay for m=20. The estimated response delays are logarithmic scale. (a) Estimated profit. (b) Estimated response delay
+
+LicenseThis project is an open-source Python implementation for educational and research purposes.
