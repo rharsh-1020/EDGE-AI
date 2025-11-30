@@ -36,7 +36,7 @@ The project simulates a Multi-access Edge Computing (MEC) environment where an i
 ```
 
 ## Installation & Usage 
-* Prerequisites
+Prerequisites
   Ensure you have Python 3.8+ installed.
   Install the required Python libraries
   ```bash
@@ -58,7 +58,7 @@ This will:
 ### 1. Convergence
 The intelligent agent learns to maximize the total reward (weighted sum of Profit and Latency) over 300+ episodes.
 
-![Convergence Plot](RESULT/Fig3_convergence.png)
+![Convergence Plot](plots/Fig3_convergence (1).png)
 > *Performance of the learning agent on various federation sizes. The solid lines represent smoothed total rewards with a window size of 40 episodes. (a) Federation size m = 20. (b) Federation size m = 80.*
 
 ### 2. Policy Comparison
@@ -66,8 +66,8 @@ Comparison of the **DRL-Dispatcher** against **Greedy** (lowest utilization) and
 
 <table>
   <tr>
-    <td align="center"><img src="RESULT/Fig4_comparison_m20.png" width="100%" /></td>
-    <td align="center"><img src="RESULT/Fig4_comparison_m80.png" width="100%" /></td>
+    <td align="center"><img src="plots/Fig4_comparison_m20.png" width="100%" /></td>
+    <td align="center"><img src="plots/Fig4_comparison_m80.png" width="100%" /></td>
   </tr>
   <tr>
     <td align="center"><b>Federation Size = 20</b></td>
@@ -85,8 +85,8 @@ The system was stress-tested against increasing task lengths (CPU cycles) and ta
 
 <table>
   <tr>
-    <td align="center"><img src="RESULT/Fig5_profit.png" width="100%" /></td>
-    <td align="center"><img src="RESULT/Fig5_delay.png" width="100%" /></td>
+    <td align="center"><img src="plots/Fig5_profit.png" width="100%" /></td>
+    <td align="center"><img src="plots/Fig5_delay.png" width="100%" /></td>
   </tr>
   <tr>
     <td align="center"><b>(a) Profit vs. Task Length</b></td>
@@ -95,4 +95,6 @@ The system was stress-tested against increasing task lengths (CPU cycles) and ta
 </table>
 
 > *Effect of input task's length on estimated profit and estimated response delay for m=20. The estimated response delays are on a logarithmic scale.*
+
+
 License: This project is an open-source Python implementation for educational and research purposes.
