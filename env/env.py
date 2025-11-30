@@ -2,119 +2,168 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import math
-from env.env_functions import process_actions, calculate_reward1, update_obs_space
-from env.workload_management import workload
+import numpy as np
+import matplotlib.pyplot as plt
+TASK_MAX_VALUES = {'psi': 340.0 * 2.0, 'b': 10.0}
 
-# ENV CLASS
-class TrafficManagementEnv(gym.Env):
-    def __init__(self, CPU_capacity = 1000, queue_capacity = 100, DFAAS_capacity = 8000, forward_capacity = 100,
-                average_requests = 100, amplitude_requests = 50, period=50, cong1 = 0, cong2 =0, forward_exceed = 0):
+def generate_task(rng):
+    # psi ~ N(270, 50), b ~ N(5,1), tau ~ N(15,3)
+    psi = max(1.0, float(rng.normal(loc=270.0, scale=50.0)))
+    b = max(0.1, float(rng.normal(loc=5.0, scale=1.0)))
+    tau = max(1.0, float(rng.normal(loc=15.0, scale=3.0)))
+    return {'psi': psi, 'b': b, 'tau': tau, 'origin': 0}
+
+def plot_rewards(rewards, filename):
+    plt.figure()
+    plt.plot(rewards)
+    plt.xlabel('Episode')
+    plt.ylabel('Cumulative reward')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+import gym
+from gym import spaces
+#from utils import generate_task, TASK_MAX_VALUES
+
+class FederatedEdgeEnv(gym.Env):
+    """Gym-like evironment for the federated edge dispatching problem.
+
+    State vector (dimension = 3*h + 16) per the paper:
+      Z (h)      - cluster average utilization
+      Gamma (h)  - cluster average allocated resources
+      Status (h) - cluster status (1/0)
+      Qhat (3)   - task encoding: TLi, TSi, TPI(3) -> in total 5? (we encode as 5)
+      W (7)      - day-of-week one-hot
+      D (4)      - part-of-day one-hot
+
+    Action: choose a cluster index (0..h-1)
+    """
+    metadata = {"render.modes": ["human"]}
+
+    def __init__(self, edge_nodes, h_clusters, seed=None):
         super().__init__()
-        
-        self.action_space = spaces.Box(low=0, high=1, shape=(3,), dtype=np.float32)
-        self.observation_space = spaces.Box(low = np.array([50, 0, 0, 0, 0]), high = np.array([150, 100, 100, 1, 1]), dtype = np.float32)
+        self.edge_nodes = edge_nodes  # list of dicts with node properties
+        self.n_nodes = len(edge_nodes)
+        self.h = h_clusters
+        self.rng = np.random.RandomState(seed)
 
-        self.max_CPU_capacity = CPU_capacity
-        self.max_queue_capacity = queue_capacity
-        self.max_DFAAS_capacity = DFAAS_capacity
-        self.max_forward_capacity = forward_capacity
-        self.forward_capacity_t = self.max_forward_capacity
-        self.forward_exceed = forward_exceed
+        # action: choose cluster
+        self.action_space = spaces.Discrete(self.h)
 
-        self.cong1 = cong1
-        self.cong2 = cong2
-        self.congestione_zero_count = 0
-        self.congestione_one_count = 0
-        self.total_managed_requests = 0
-        self.total_rejected_requests = 0
-        
-        self.average_requests = average_requests
-        self.amplitude_requests = amplitude_requests
-        self.period = period
-        self.t = 0
-        
-        self.queue_workload = []
-        self.input_requests = self.calculate_requests()
-        
-        self.reward_range = (-np.inf, np.inf)
-    
-    def calculate_requests(self):
-        return int(self.average_requests + self.amplitude_requests * math.sin(2 * math.pi * self.t / self.period))
-    
+        # compute state dim = 3*h+16 per paper; we'll use 3*h + 16
+        self.state_dim = 3 *self.h + 16
+        self.observation_space =spaces.Box(low=-np.inf, high=np.inf, shape=(self.state_dim,), dtype=np.float32)
+        self.cluster_map = None  # list of lists: cluster -> node indices
+
+        # runtime
+        self.current_task = None
+        self.time_step = 0
+
+    def set_clusters(self, cluster_map):
+        self.cluster_map = cluster_map
+
     def reset(self):
-        self.t = 0
-        self.CPU_capacity = self.max_CPU_capacity
-        self.queue_capacity = self.max_queue_capacity
-        self.DFAAS_capacity = self.max_DFAAS_capacity
-        self.forward_capacity = self.max_forward_capacity
-        self.forward_capacity_t = self.max_forward_capacity
-        self.forward_exceed = 0
-        self.queue_shares = 0
-        self.queue_workload = []
-        self.total_rejected_requests = 0
-        self.cong1 = 0
-        self.cong2 = 0
+        for n in self.edge_nodes:
+            n['utilization'] = self.rng.uniform(0.0, 0.3)  # start lightly loaded
+            n['allocated'] = self.rng.uniform(0.0, 0.2)
+            n['status'] = 1
+        self.time_step = 0
+        self.current_task = generate_task(self.rng)
+        return self._get_state()
 
-        return np.array([self.input_requests, self.queue_capacity, self.forward_capacity, self.cong1, self.cong2], dtype=np.float32)
-    
-    @property
-    def render_mode(self) -> str:
-        return self._render_mode
-    
-    def step(self, action):
-        #1. VISUALIZZO LO STATO ATTUALE DEL SISTEMA
-        #print(f"Stato del Sistema 1: {self.cong1}")
-        #print(f"Stato del Sistema 2: {self.cong2}")
-        #print(f"Queue Capacity: {self.queue_capacity}")
-        #print(f"Shares in Coda: {self.queue_shares}")
-        #print(f"Forward Capacity: {self.forward_capacity}")
-        #print(f"INPUT: {self.input_requests}")
+    def step(self, action, omega=0.5):
+        assert self.cluster_map is not None, "cluster_map must be set"
+        chosen_cluster = int(action)
 
-        #2. ESTRAGGO, SALVO E VISUALIZZO IL NUMERO DI RICHIESTE ELABORATE LOCALMENTE, INOLTRATE E RIFIUTATE
-        self.local, self.forwarded, self.rejected = process_actions(action, self.input_requests)
-        self.total_managed_requests += self.local + self.forwarded + self.rejected
-        #print(f"LOCAL: {self.local}")
-        #print(f"FORWARDED: {self.forwarded}")
-        #print(f"REJECTED: {self.rejected}")
+        cluster_nodes = self.cluster_map[chosen_cluster]
+        node_idx = min(cluster_nodes, key=lambda i: self.edge_nodes[i]['utilization'])
+        node = self.edge_nodes[node_idx]
 
-        #3. CALCOLO I PESI PER IL SISTEMA DI RICOMPENSA E LA REWARD
-        self.QUEUE_factor = self.queue_capacity / self.max_queue_capacity
-        self.FORWARD_factor = self.forward_capacity / self.max_forward_capacity
-        self.forward_exceed = max(0, self.forwarded - self.forward_capacity) # limito il valore a 0 come minimo, perchè se inoltro meno richieste di quelle che gli altri nodi possono accogliere, vuol dire che non ho ecceduto
-        reward = calculate_reward1(self.local, self.forwarded, self.rejected, 
-                                   self.QUEUE_factor, self.FORWARD_factor, self.cong1, self.cong2, self.forward_exceed)
-        #print(f"REWARD: {reward}")
+        # compute reward (profit + delay) using the formulas in the paper
+        psi, b, tau = self.current_task['psi'], self.current_task['b'], self.current_task['tau']
+
+        local_node = self.edge_nodes[self.current_task['origin']]
+        if node_idx == self.current_task['origin']:
+            # local execution
+            beta = local_node['allocated'] if local_node['allocated'] > 0 else 0.1
+            cpi = local_node['cp']
+            chi = local_node['chi']
+            pi = local_node['price']
+            V = pi * psi - (beta * cpi * chi)
+            U = np.exp(-psi / (beta * cpi + 1e-8))
+        else:
+            cmir = min(local_node['cm'].get(node_idx, 1.0), 1.0)
+            nu = local_node['nu']
+            pr = node['price']
+            V = local_node['price'] * psi - (cmir * nu + pr * psi)
+            beta_r = node['allocated'] if node['allocated'] > 0 else 0.1
+            cpr = node['cp']
+            U = np.exp(-(psi / (beta_r * cpr + 1e-8) + b / (cmir + 1e-8)))
+
+        reward = omega * V + (1.0 - omega) * U
         
-        #4. COSTRUISCO LE LISTE DI CPU_workload E queue_workload
-        # Viene fatto il campionamento delle richieste elaborate in CPU e quelle messe in coda (Classe, shares, dfaas_mb, position)
-        # Il campionamento per la classe avviene da una distrib uniforme, per gli shares e i dfaas_mb da una distrib normale
-        # Costruisco le liste che descrivono quanto ho elaborato in CPU in questo step e quanto ho messo in coda
-        # Viene data precedenza all'elaborazione delle requests in coda dallo step precedente
-        self.CPU_workload, self.queue_workload, new_rejections = workload.manage_workload(self.local, self.CPU_capacity, 
-                                                                    self.DFAAS_capacity, self.queue_workload, self.max_queue_capacity,
-                                                                    self.max_CPU_capacity, self.max_DFAAS_capacity)
-        self.total_rejected_requests += self.rejected + new_rejections
-        #5. AGGIORNO LO SPAZIO DELLE OSSERVAZIONI
-        # Aggiorno la capacità disponibile in base al n di requests in queue_workload
-        # Verifico la condizione per il done
-        scenario = "scenario1"
-        self.queue_capacity, self.queue_shares, self.t, done, self.forward_capacity, self.forward_capacity_t, self.cong1, self.cong2, self.congestione_zero_count, self.congestione_one_count, self.input_requests = update_obs_space(scenario, self.average_requests, self.amplitude_requests, self.queue_workload, self.queue_capacity, self.max_queue_capacity, self.t,
-                                                                                                                                                                                                                                        self.forward_capacity, self.forward_capacity_t, self.period, self.cong1, self.cong2,
-                                                                                                                                                                                                                                        self.forward_exceed, self.congestione_zero_count, self.congestione_one_count)   
-        #print(f"Steps non in congestione: {self.congestione_zero_count}")
-        #print(f"Steps in congestione: {self.congestione_one_count}")
-        state = np.array([self.input_requests, self.queue_capacity, self.forward_capacity, self.cong1, self.cong2], dtype=np.float32)
-        truncated = False
-        terminated = done
-        info = {}
-        
-        return state, reward, truncated, terminated, info
-    
-    def render(self, mode="human", close=False):
-        pass
+        node['utilization'] += (psi / (node['cp'] + 1e-8)) * 0.01
+        node['allocated'] = min(1.0, node['allocated'] + 0.01)
 
-    def close(self):
-        pass
+        self.time_step += 1
+        done = False
+        self.current_task = generate_task(self.rng)
+        info = {
+              'node_idx': node_idx,
+              'reward_components': {
+                  'V': V,
+                  'U': U,
+                  'psi': psi,
+                  'b': b,
+                  'tau': tau
+              }
+        }
 
-    def seed(self, seed=None):
-        pass
+        return self._get_state(), float(reward), done, info
+
+    def _get_state(self):
+        # build Z, Gamma, Status for each cluster
+        Z = np.zeros(self.h)
+        G = np.zeros(self.h)
+        S = np.zeros(self.h)
+        for c in range(self.h):
+            nodes = self.cluster_map[c]
+            if len(nodes) == 0:
+                Z[c] = 0.0
+                G[c] = 0.0
+                S[c] = 0.0
+            else:
+                utilizations = [self.edge_nodes[i]['utilization'] for i in nodes]
+                allocs =[self.edge_nodes[i]['allocated'] for i in nodes]
+                statuses = [self.edge_nodes[i]['status'] for i in nodes]
+                Z[c] = np.mean(utilizations)
+                G[c] = np.mean(allocs)
+                S[c] = 1.0 if np.any(np.array(statuses) > 0) else 0.0
+
+        psi, b, tau = self.current_task['psi'], self.current_task['b'], self.current_task['tau']
+        TLi = psi /TASK_MAX_VALUES['psi']
+        TSi = b /TASK_MAX_VALUES['b']
+        if tau <= 10:
+            TPI = [1, 0, 0]
+        elif tau < 20:
+            TPI =[0, 1, 0]
+        else:
+            TPI = [0, 0, 1]
+
+        Qhat = np.array([TLi, TSi] + TPI)
+        W = np.zeros(7)
+        W[self.time_step % 7] = 1
+        D = np.zeros(4)
+        D[(self.time_step // 6) % 4] = 1
+
+        state = np.concatenate([Z, G, S, Qhat, W, D]).astype(np.float32)
+        if state.shape[0] != self.state_dim:
+            arr = np.zeros(self.state_dim, dtype=np.float32)
+            arr[:state.shape[0]] = state[:min(state.shape[0], self.state_dim)]
+            state = arr
+        return state
+
+    def render(self, mode='human'):
+        print(f"Time {self.time_step}: sample task {self.current_task}")
