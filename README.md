@@ -58,7 +58,7 @@ This will:
 ### 1. Convergence
 The intelligent agent learns to maximize the total reward (weighted sum of Profit and Latency) over 300+ episodes.
 
-![Convergence Plot](plots/Fig3_convergence (1).png)
+![Convergence Plot](plots/Fig3_convergence_1.png)
 > *Performance of the learning agent on various federation sizes. The solid lines represent smoothed total rewards with a window size of 40 episodes. (a) Federation size m = 20. (b) Federation size m = 80.*
 
 ### 2. Policy Comparison
