@@ -55,30 +55,44 @@ This will:
 * Generate performance metrics in the RESULT/ directory.
 
 ## Results
+### 1. Convergence
+The intelligent agent learns to maximize the total reward (weighted sum of Profit and Latency) over 300+ episodes.
 
-1. ConvergenceThe intelligent agent learns to maximize the total reward (weighted sum of Profit and Latency) over 300+ episodes.
-[Performance of the learning agent on various federation sizes in terms of totalreward .They show the convergence of DRL-Dispatcher on various federation sizes. The solid lines represent smoothed total rewards with a window size of 40 episodes. (a) Federation size m = 20. (b) Federation size m = 80](plots/Fig3_convergence (1).png)
-> Performance of the learning agent on various federation sizes in terms of totalreward .They show the convergence of DRL-Dispatcher on various federation sizes. The solid lines represent smoothed total rewards with a window size of 40 episodes. (a) Federation size m = 20. (b) Federation size m = 80
-3. Policy Comparison:Comparison of the DRL-Dispatcher against Greedy (lowest utilization) and Random policies. The Python-based agent consistently achieves higher cumulative rewards by learning the trade-off between communication costs and processing speed.
+![Convergence Plot](RESULT/Fig3_convergence.png)
+> *Performance of the learning agent on various federation sizes. The solid lines represent smoothed total rewards with a window size of 40 episodes. (a) Federation size m = 20. (b) Federation size m = 80.*
+
+### 2. Policy Comparison
+Comparison of the **DRL-Dispatcher** against **Greedy** (lowest utilization) and **Random** policies. The Python-based agent consistently achieves higher cumulative rewards by learning the trade-off between communication costs and processing speed.
+
 <table>
-<tr>
-  <td align="center"><img src="plots/Fig4_comparison_m20.png" width="120"/><br>Fedaration Size=20</td>
-  <td align="center"><img src="plots/Fig4_comparison_m80.png" width="120"/><br>Fedaration Size=20</td>
-</tr>
+  <tr>
+    <td align="center"><img src="RESULT/Fig4_comparison_m20.png" width="100%" /></td>
+    <td align="center"><img src="RESULT/Fig4_comparison_m80.png" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Federation Size = 20</b></td>
+    <td align="center"><b>Federation Size = 80</b></td>
+  </tr>
 </table>
 
->  Comparison of the performance of DRL-Dispatcher, GA, and RA in terms of cumulative reward on different federation sizes. (a) Federation size m=20.(b) Federation size m = 80
+> *Comparison of the performance of DRL-Dispatcher, GA, and RA in terms of cumulative reward on different federation sizes.*
 
-3.Impact of Task Features: The system was stress-tested against increasing task lengths (CPU cycles) and task sizes (Data size).
-* Profitability: As task length increases, the agent successfully identifies profitable offloading opportunities, maintaining a positive profit margin (Revenue > Cost).
-* Latency: The agent minimizes delay even as task sizes grow by intelligently routing data to nodes with higher bandwidth.Profit vs. Task LengthDelay vs. Task Length
+### 3. Impact of Task Features
+The system was stress-tested against increasing task lengths (CPU cycles) and task sizes (Data size).
+
+* **Profitability:** As task length increases, the agent successfully identifies profitable offloading opportunities, maintaining a positive profit margin (Revenue > Cost).
+* **Latency:** The agent minimizes delay even as task sizes grow by intelligently routing data to nodes with higher bandwidth.
+
 <table>
-<tr>
-  <td align="center"><img src="plots/Fig5_profit.png" width="120"/><br>(a)</td>
-  <td align="center"><img src="plots/Fig5_delay.png" width="120"/><br>(b)</td>
-</tr>
+  <tr>
+    <td align="center"><img src="RESULT/Fig5_profit.png" width="100%" /></td>
+    <td align="center"><img src="RESULT/Fig5_delay.png" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>(a) Profit vs. Task Length</b></td>
+    <td align="center"><b>(b) Delay vs. Task Length</b></td>
+  </tr>
 </table>
 
->   Effect of input task's length on estimated profit and estimated response delay for m=20. The estimated response delays are logarithmic scale. (a) Estimated profit. (b) Estimated response delay
-
-LicenseThis project is an open-source Python implementation for educational and research purposes.
+> *Effect of input task's length on estimated profit and estimated response delay for m=20. The estimated response delays are on a logarithmic scale.*
+License: This project is an open-source Python implementation for educational and research purposes.
